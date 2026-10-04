@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S&R Drone Dashboard</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    
+    <style>
+        html, body {
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #111827; 
+        }
+        #map { height: 100%; width: 100%; border-radius: 0.5rem; }
+        .leaflet-draw-toolbar { background-color: #374151; border: 1px solid #4b5563; }
+        .leaflet-draw-toolbar a { background-color: #4b5563; color: white; }
+        .leaflet-draw-toolbar a:hover { background-color: #6b7280; }
+        .path-list::-webkit-scrollbar { width: 6px; }
+        .path-list::-webkit-scrollbar-track { background: #374151; border-radius: 10px; }
+        .path-list::-webkit-scrollbar-thumb { background: #6b7280; border-radius: 10px; }
+        .path-list::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+    </style>
+</head>
+<body class="text-white p-4 flex flex-col h-screen">
+
+    <header class="flex justify-between items-center pb-4 border-b border-gray-700">
+        <h1 class="text-3xl font-bold">Garuda Dashboard</h1>
+        <div class="flex items-center space-x-4">
+            <span id="drone-status-text" class="text-lg font-medium text-yellow-400">UNARMED</span>
+            <button id="mission-control-btn" class="bg-red-600 text-white font-bold py-2 px-6 rounded-lg shadow-md cursor-not-allowed transition-all duration-200" data-state="inactive">MISSION INACTIVE</button>
+        </div>
+    </header>
+
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 py-4 min-h-0">
+        
+        <div class="flex flex-col bg-gray-800 p-4 rounded-lg shadow-lg overflow-hidden">
+            <h2 class="text-xl font-semibold mb-2">Live Feed</h2>
+            <div class="flex-1 bg-black rounded-md flex items-center justify-center relative">
+                <img id="video-stream" src="" alt="Live Feed" class="max-h-full max-w-full object-contain">
+                
+                <div class="absolute top-2 right-2 flex items-center gap-2">
+                    <div id="camera-mode-icon" class="bg-gray-900/80 p-1.5 rounded text-yellow-400 shadow-md border border-gray-600 transition-colors duration-300">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5">
+                          <path d="M12 2.25a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V3a.75.75 0 0 1 .75-.75ZM7.5 12a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM18.894 6.166a.75.75 0 0 0-1.06-1.06l-1.591 1.59a.75.75 0 1 0 1.06 1.061l1.591-1.59ZM21.75 12a.75.75 0 0 1-.75.75h-2.25a.75.75 0 0 1 0-1.5H21a.75.75 0 0 1 .75.75ZM17.834 18.894a.75.75 0 0 0 1.06-1.06l-1.59-1.591a.75.75 0 1 0-1.061 1.06l1.59 1.591ZM12 18a.75.75 0 0 1 .75.75V21a.75.75 0 0 1-1.5 0v-2.25A.75.75 0 0 1 12 18ZM7.758 17.303a.75.75 0 0 0-1.061-1.06l-1.591 1.59a.75.75 0 0 0 1.06 1.061l1.591-1.59ZM6 12a.75.75 0 0 1-.75.75H3a.75.75 0 0 1 0-1.5h2.25A.75.75 0 0 1 6 12ZM6.697 7.757a.75.75 0 0 0 1.06-1.06l-1.59-1.591a.75.75 0 0 0-1.061 1.06l1.59 1.591Z" />
+                        </svg>
+                    </div>
+                    <button id="switch-cam-btn" class="bg-gray-700 hover:bg-gray-600 text-white text-xs font-bold py-1.5 px-3 rounded border border-gray-500 shadow-md opacity-90 hover:opacity-100 transition-opacity flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                        </svg> Switch Cam
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-col gap-4 overflow-hidden">
+            <div class="flex flex-col bg-gray-800 p-4 rounded-lg shadow-lg flex-[3] overflow-hidden">
+                <h2 class="text-xl font-semibold mb-2">Mission Map</h2>
+                <div id="map-container" class="flex-1"><div id="map"></div></div>
+            </div>
+            
+            <div class="flex flex-col bg-gray-800 p-4 rounded-lg shadow-lg flex-[2] overflow-hidden relative">
+                <h2 class="text-xl font-semibold mb-2">Mission Plan</h2>
+                
+                <div id="detection-popup" class="hidden absolute top-4 right-4 bg-red-600/90 text-white text-sm font-bold px-4 py-2 rounded-md shadow-lg backdrop-blur-sm z-50 animate-bounce transition-all">
+                    Detected Human (0% accurate)
+                </div>
+                
+                <div id="path-list-container" class="path-list flex-1 overflow-y-auto text-gray-300">
+                    <p id="path-placeholder" class="italic">Mission plan will appear here when activated...</p>
+                    <div id="path-content" class="hidden">
+                        <h3 class="font-bold text-lg text-white mb-1">Target Area Corners:</h3>
+                        <ul id="corner-coords-list" class="list-disc list-inside mb-3 text-sm"></ul>
+                        <h3 class="font-bold text-lg text-white mb-1">Flight Path Waypoints:</h3>
+                        <ol id="waypoint-list" class="list-decimal list-inside text-sm space-y-1"></ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="message-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[2000]">
+        <div class="bg-white text-gray-900 p-6 rounded-lg shadow-xl max-w-sm mx-auto">
+            <h3 id="modal-title" class="text-xl font-bold mb-4">Notification</h3>
+            <p id="modal-message">Please draw a mission area (polygon) on the map first.</p>
+            <button id="modal-ok-btn" class="mt-6 bg-blue-600 text-white py-2 px-4 rounded-lg w-full">OK</button>
+            <div id="modal-confirm-buttons" class="hidden mt-6 flex justify-end space-x-4">
+                <button id="modal-cancel-btn" class="bg-gray-500 text-white py-2 px-4 rounded-lg">No, Go Back</button>
+                <button id="modal-confirm-btn" class="bg-red-600 text-white py-2 px-4 rounded-lg">Yes, Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let map, drawnItems, missionAreaLayer, droneMarker, flightPathPolyline, socket;
+        let detectionMarkers = {};
+        const missionControlBtn = document.getElementById('mission-control-btn');
+        const droneStatusText = document.getElementById('drone-status-text');
+        
+        // Modal elements
+        const modal = document.getElementById('message-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalOkBtn = document.getElementById('modal-ok-btn');
+        const modalConfirmButtons = document.getElementById('modal-confirm-buttons');
+        const modalCancelBtn = document.getElementById('modal-cancel-btn');
+        const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+
+        function showModal(title, message, type = 'info') {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            if (type === 'info') {
+                modalOkBtn.classList.remove('hidden');
+                modalConfirmButtons.classList.add('hidden');
+            } else {
+                modalOkBtn.classList.add('hidden');
+                modalConfirmButtons.classList.remove('hidden');
+            }
+            modal.classList.remove('hidden');
+        }
+        function closeModal() { modal.classList.add('hidden'); }
+        modalOkBtn.onclick = closeModal;
+        modalCancelBtn.onclick = closeModal;
+        modalConfirmBtn.onclick = () => { socket.emit('stop_mission'); closeModal(); };
+
+        function initMap() {
+            const baseLat = 28.568444; const baseLng = 77.316697;
+            map = L.map('map').setView([baseLat, baseLng], 16);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OSM' }).addTo(map);
+            drawnItems = new L.FeatureGroup();
+            map.addLayer(drawnItems);
+            const drawControl = new L.Control.Draw({
+                edit: { featureGroup: drawnItems, remove: true },
+                draw: { polygon: { shapeOptions: { color: '#f357a1' } }, polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false }
+            });
+            map.addControl(drawControl);
+            map.on(L.Draw.Event.CREATED, function (e) {
+                if (e.layerType === 'polygon') {
+                    if (missionAreaLayer) drawnItems.removeLayer(missionAreaLayer);
+                    missionAreaLayer = e.layer;
+                    drawnItems.addLayer(e.layer);
+                    setMissionButtonState('ready');
+                }
+            });
+            map.on(L.Draw.Event.DELETED, function() { missionAreaLayer = null; setMissionButtonState('inactive'); });
+            map.on(L.Draw.Event.EDITED, function(e) { e.layers.eachLayer(l => { if (l instanceof L.Polygon) missionAreaLayer = l; }); });
+        }
+
+        function setMissionButtonState(state) {
+            missionControlBtn.dataset.state = state;
+            missionControlBtn.className = "text-white font-bold py-2 px-6 rounded-lg shadow-md transition-all duration-200 ";
+            if (state === 'inactive') {
+                missionControlBtn.textContent = 'MISSION INACTIVE';
+                missionControlBtn.classList.add('bg-red-600', 'cursor-not-allowed');
+            } else if (state === 'ready') {
+                missionControlBtn.textContent = 'START MISSION';
+                missionControlBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+            } else {
+                missionControlBtn.textContent = 'CANCEL MISSION';
+                missionControlBtn.classList.add('bg-red-700', 'hover:bg-red-800');
+            }
+        }
+
+        function initSocketIO() {
+            socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+
+            // Handle Camera Switch UI
+            const switchCamBtn = document.getElementById('switch-cam-btn');
+            const modeIconContainer = document.getElementById('camera-mode-icon');
+            let isDayMode = true;
+            const sunSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5"><path d="M12 2.25a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V3a.75.75 0 0 1 .75-.75ZM7.5 12a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM18.894 6.166a.75.75 0 0 0-1.06-1.06l-1.591 1.59a.75.75 0 1 0 1.06 1.061l1.591-1.59ZM21.75 12a.75.75 0 0 1-.75.75h-2.25a.75.75 0 0 1 0-1.5H21a.75.75 0 0 1 .75.75ZM17.834 18.894a.75.75 0 0 0 1.06-1.06l-1.59-1.591a.75.75 0 1 0-1.061 1.06l1.59 1.591ZM12 18a.75.75 0 0 1 .75.75V21a.75.75 0 0 1-1.5 0v-2.25A.75.75 0 0 1 12 18ZM7.758 17.303a.75.75 0 0 0-1.061-1.06l-1.591 1.59a.75.75 0 0 0 1.06 1.061l1.591-1.59ZM6 12a.75.75 0 0 1-.75.75H3a.75.75 0 0 1 0-1.5h2.25A.75.75 0 0 1 6 12ZM6.697 7.757a.75.75 0 0 0 1.06-1.06l-1.59-1.591a.75.75 0 0 0-1.061 1.06l1.59 1.591Z" /></svg>`;
+            const moonSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5 text-blue-300"><path fill-rule="evenodd" d="M9.528 1.718a.75.75 0 0 1 .162.819A8.97 8.97 0 0 0 9 6a9 9 0 0 0 9 9 8.97 8.97 0 0 0 3.463-.69.75.75 0 0 1 .981.98 10.503 10.503 0 0 1-9.694 6.46c-5.799 0-10.5-4.7-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 0 1 .818.162Z" clip-rule="evenodd" /></svg>`;
+            switchCamBtn.addEventListener('click', () => {
+                switchCamBtn.textContent = 'Switching...'; switchCamBtn.classList.add('cursor-wait');
+                socket.emit('switch_camera');
+                if (isDayMode) { modeIconContainer.innerHTML = moonSVG; modeIconContainer.classList.remove('text-yellow-400'); }
+                else { modeIconContainer.innerHTML = sunSVG; modeIconContainer.classList.add('text-yellow-400'); }
+                isDayMode = !isDayMode;
+                setTimeout(() => { switchCamBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4 inline mr-1"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg> Switch Cam`; switchCamBtn.classList.remove('cursor-wait'); }, 2000);
+            });
+
+            missionControlBtn.addEventListener('click', () => {
+                const state = missionControlBtn.dataset.state;
+                if (state === 'inactive') showModal('Info', 'Draw mission area first.');
+                else if (state === 'ready') {
+                    if (!missionAreaLayer) return;
+                    const coords = missionAreaLayer.getLatLngs()[0].map(ll => [ll.lat, ll.lng]);
+                    socket.emit('start_mission', { area: coords });
+                    setMissionButtonState('active');
+                } else if (state === 'active') showModal('Confirm Cancel', 'Cancel mission?', 'confirm');
+            });
+
+            socket.on('video_frame', (data) => { document.getElementById('video-stream').src = 'data:image/jpeg;base64,' + data.frame; });
+            socket.on('mission_status', (data) => {
+                if (data.active) setMissionButtonState('active');
+                else {
+                    setMissionButtonState('inactive');
+                    if (missionAreaLayer) drawnItems.removeLayer(missionAreaLayer);
+                    if (flightPathPolyline) map.removeLayer(flightPathPolyline);
+                    missionAreaLayer = null; flightPathPolyline = null;
+                    document.getElementById('path-placeholder').classList.remove('hidden');
+                    document.getElementById('path-content').classList.add('hidden');
+                    if (data.error) showModal('Error', data.error);
+                }
+            });
+            socket.on('mission_plan', (data) => {
+                if (flightPathPolyline) map.removeLayer(flightPathPolyline);
+                flightPathPolyline = L.polyline(data.path, { color: '#3b82f6', weight: 3, dashArray: '5, 5' }).addTo(map);
+                const cl = document.getElementById('corner-coords-list'); cl.innerHTML = '';
+                data.corners.forEach(c => cl.innerHTML += `<li>[${c[0].toFixed(5)}, ${c[1].toFixed(5)}]</li>`);
+                const wl = document.getElementById('waypoint-list'); wl.innerHTML = '';
+                data.path.forEach((c, i) => wl.innerHTML += `<li>${i==0?'Start':(i==1?'Path':'->')} [${c[0].toFixed(5)}, ${c[1].toFixed(5)}]</li>`);
+                document.getElementById('path-placeholder').classList.add('hidden');
+                document.getElementById('path-content').classList.remove('hidden');
+            });
+            socket.on('drone_update', (data) => {
+                const icon = L.divIcon({ html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style="width:32px;height:32px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));"><path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#3B82F6" stroke="#FFFFFF" stroke-width="1.5"/><path d="M2 17L12 22L22 17" stroke="#3B82F6" stroke-width="1.5"/><path d="M2 12L12 17L22 12" stroke="#3B82F6" stroke-width="1.5"/></svg>`, className: '', iconSize: [32, 32], iconAnchor: [16, 16] });
+                if (!droneMarker) { droneMarker = L.marker([data.lat, data.lng], { icon: icon, zIndexOffset: 1000 }).addTo(map); map.panTo([data.lat, data.lng]); }
+                else droneMarker.setLatLng([data.lat, data.lng]);
+            });
+
+            // --- Handle Human Detections + Popup ---
+            socket.on('human_detected', (data) => {
+                const { lat, lng, id, conf } = data;
+                if (!detectionMarkers[id]) {
+                    const m = L.marker([lat, lng]).addTo(map).bindPopup(`<b>Human Detected</b><br>ID: ${id}<br>Conf: ${(conf*100).toFixed(0)}%`);
+                    detectionMarkers[id] = m;
+                    
+                    // Show Popup
+                    const popup = document.getElementById('detection-popup');
+                    popup.textContent = `Detected Human (${(conf*100).toFixed(0)}% accurate)`;
+                    popup.classList.remove('hidden');
+                    
+                    // Hide after 5 seconds
+                    setTimeout(() => { popup.classList.add('hidden'); }, 5000);
+                }
+            });
+        }
+        document.addEventListener('DOMContentLoaded', () => { initMap(); initSocketIO(); });
+    </script>
+</body>
+</html>
